@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2 style="margin-top:0;">Results</h2>
+    <form method="get" action="/teacher/results">
+      <label>Department</label>
+      <select name="department_id">
+        {% for d in departments %}
+          <option value="{{ d.id }}" {% if d.id == department_id %}selected{% endif %}>{{ d.college.name }} — {{ d.name }}</option>
+        {% endfor %}
+      </select>
+      <label>Grade level</label>
+      <select name="grade_level">
+        {% for g in [1,2,3,4] %}
+          <option value="{{ g }}" {% if g == grade_level %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+      <div style="margin-top: 12px;">
+        <button type="submit">Load</button>
+        <a href="/teacher?department_id={{ department_id }}&grade_level={{ grade_level }}" style="margin-left:10px;">Back to dashboard →</a>
+      </div>
+    </form>
+
+    {% if not config %}
+      <div class="error" style="margin-top:16px;">No exam config for this department/grade yet.</div>
+    {% else %}
+      <h3 style="margin-top:18px;">Latest attempts</h3>
+      {% if attempts %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Attempt</th>
+              <th>Ended</th>
+              <th>Reason</th>
+              <th>Time (s)</th>
+              <th>Score</th>
+              <th>Rating</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in attempts %}
+              <tr>
+                <td>{{ a.student.university_id }}</td>
+                <td>{{ a.attempt_number }}</td>
+                <td>{{ a.ended_at.strftime("%Y-%m-%d %H:%M") if a.ended_at else "-" }}</td>
+                <td>{{ a.ended_reason.value if a.ended_reason else "-" }}</td>
+                <td>{{ a.elapsed_seconds if a.elapsed_seconds is not none else "-" }}</td>
+                <td>{{ "%.1f"|format(a.score or 0) }}</td>
+                <td>{{ a.rating.value if a.rating else "-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="muted" style="margin-top:10px;">No attempts yet.</div>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endblock %}
+

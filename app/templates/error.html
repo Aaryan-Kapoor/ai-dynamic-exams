@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2 style="margin-top:0;">Error {{ status_code }}</h2>
+    <div class="error">{{ detail }}</div>
+    <div style="margin-top: 14px;">
+      <a href="/" style="margin-right:10px;">Home</a>
+      <a href="/login">Login</a>
+    </div>
+  </div>
+{% endblock %}
+

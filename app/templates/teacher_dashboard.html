@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <h2 style="margin-top:0;">Teacher Dashboard</h2>
+        <form method="get" action="/teacher">
+          <label>Department</label>
+          <select name="department_id">
+            {% for d in departments %}
+              <option value="{{ d.id }}" {% if d.id == department_id %}selected{% endif %}>{{ d.college.name }} — {{ d.name }}</option>
+            {% endfor %}
+          </select>
+          <label>Grade level</label>
+          <select name="grade_level">
+            {% for g in [1,2,3,4] %}
+              <option value="{{ g }}" {% if g == grade_level %}selected{% endif %}>{{ g }}</option>
+            {% endfor %}
+          </select>
+          <div style="margin-top: 12px;">
+            <button type="submit">Load</button>
+            <a href="/teacher/results?department_id={{ department_id }}&grade_level={{ grade_level }}" style="margin-left:10px;">View results →</a>
+          </div>
+        </form>
+      </div>
+
+      <div class="card" style="margin-top: 16px;">
+        <h3 style="margin-top:0;">Exam Configuration</h3>
+        <form method="post" action="/teacher/config">
+          <input type="hidden" name="department_id" value="{{ department_id }}">
+          <input type="hidden" name="grade_level" value="{{ grade_level }}">
+
+          <div class="row">
+            <div class="col">
+              <label>Max duration (minutes)</label>
+              <input name="max_duration_minutes" type="number" min="1" max="600" value="{{ (config.max_duration_minutes if config else defaults.exam_default_max_duration_minutes) }}">
+            </div>
+            <div class="col">
+              <label>Max attempts (retakes)</label>
+              <input name="max_attempts" type="number" min="1" max="10" value="{{ (config.max_attempts if config else defaults.exam_default_max_attempts) }}">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label>Max questions</label>
+              <input name="max_questions" type="number" min="1" max="200" value="{{ (config.max_questions if config else defaults.exam_default_max_questions) }}">
+            </div>
+            <div class="col">
+              <label>Stop after consecutive incorrect</label>
+              <input name="stop_consecutive_incorrect" type="number" min="1" max="50" value="{{ (config.stop_consecutive_incorrect if config else defaults.exam_default_stop_consecutive_incorrect) }}">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label>Stop if a question takes ≥ seconds</label>
+              <input name="stop_slow_seconds" type="number" min="10" max="7200" value="{{ (config.stop_slow_seconds if config else defaults.exam_default_stop_slow_seconds) }}">
+            </div>
+            <div class="col">
+              <label>Difficulty range (1..5)</label>
+              <div class="row">
+                <div class="col">
+                  <input name="difficulty_min" type="number" min="1" max="5" value="{{ (config.difficulty_min if config else defaults.exam_default_difficulty_min) }}">
+                </div>
+                <div class="col">
+                  <input name="difficulty_max" type="number" min="1" max="5" value="{{ (config.difficulty_max if config else defaults.exam_default_difficulty_max) }}">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 12px;">
+            <button class="primary" type="submit">Save settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card rightbox">
+        <h3 style="margin-top:0;">Upload Lectures</h3>
+        <div class="muted" style="font-size:13px;">PDF works out of the box. Images need OCR (tesseract).</div>
+        <form method="post" action="/teacher/lectures/upload" enctype="multipart/form-data">
+          <input type="hidden" name="department_id" value="{{ department_id }}">
+          <input type="hidden" name="grade_level" value="{{ grade_level }}">
+          <label>File</label>
+          <input type="file" name="file" required>
+          <div style="margin-top: 12px;">
+            <button class="primary" type="submit">Upload + index</button>
+          </div>
+        </form>
+
+        <h4 style="margin: 18px 0 6px 0;">Recent uploads</h4>
+        {% if lectures %}
+          <table class="table">
+            <thead>
+              <tr><th>File</th><th>Type</th><th>When</th></tr>
+            </thead>
+            <tbody>
+              {% for l in lectures %}
+                <tr>
+                  <td>{{ l.original_filename }}</td>
+                  <td>{{ l.file_type }}</td>
+                  <td>{{ l.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <div class="muted" style="font-size:13px;">No uploads yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

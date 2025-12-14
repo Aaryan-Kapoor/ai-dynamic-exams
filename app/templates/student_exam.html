@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h2 style="margin:0;">Exam</h2>
+            <div class="muted" style="font-size:13px;">Question {{ question.question_number }} / {{ config.max_questions }}</div>
+          </div>
+          <div class="pill timer" id="timer">Elapsed: --:-- / --:--</div>
+        </div>
+
+        <div style="margin-top: 14px; font-size: 16px; line-height: 1.5;">
+          {{ question.question_text }}
+        </div>
+
+        <form method="post" action="/student/exam/answer" style="margin-top: 14px;">
+          <input type="hidden" name="question_id" value="{{ question.id }}">
+          <label>Your answer</label>
+          <textarea name="student_answer" rows="6" placeholder="Type your answer..."></textarea>
+          <div style="margin-top: 12px; display:flex; gap:10px;">
+            <button class="primary" type="submit">Submit</button>
+          </div>
+        </form>
+
+        <form method="post" action="/student/exam/end" style="margin-top: 12px;">
+          <button class="danger" type="submit">END (finish exam)</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card rightbox">
+        <h3 style="margin-top:0;">Current Understanding</h3>
+        <div class="muted" style="font-size:13px;">Updates as you answer.</div>
+        <div style="margin-top: 10px;">
+          <div class="progress"><div style="width: {{ "%.0f"|format(score_so_far) }}%;"></div></div>
+          <div style="margin-top:8px;" class="muted">Status: <b>{{ rating_so_far }}</b> • Score so far: {{ "%.1f"|format(score_so_far) }}/100</div>
+        </div>
+        <div style="margin-top: 14px;">
+          <div class="pill">Consecutive incorrect: {{ attempt.consecutive_incorrect }}</div>
+          <div class="pill" style="margin-left:8px;">Answered: {{ attempt.questions_answered }}</div>
+        </div>
+        <div class="muted" style="margin-top:12px; font-size:12px;">
+          Auto-stop if you reach {{ config.stop_consecutive_incorrect }} consecutive incorrect answers, or if a question takes ≥ {{ config.stop_slow_seconds }}s, or when time is up.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const startedAt = new Date("{{ attempt.started_at.isoformat() }}Z").getTime();
+    const maxSeconds = {{ config.max_duration_minutes * 60 }};
+    function pad(n){ return (n<10?("0"+n):(""+n)); }
+    function tick(){
+      const now = Date.now();
+      const elapsed = Math.max(0, Math.floor((now - startedAt)/1000));
+      const m = Math.floor(elapsed/60);
+      const s = elapsed%60;
+      const maxM = Math.floor(maxSeconds/60);
+      const maxS = maxSeconds%60;
+      document.getElementById("timer").textContent = "Elapsed: " + pad(m) + ":" + pad(s) + " / " + pad(maxM) + ":" + pad(maxS);
+      if (elapsed >= maxSeconds) {
+        // Hard stop: submit END form.
+        document.querySelector('form[action="/student/exam/end"]').submit();
+      }
+    }
+    tick();
+    setInterval(tick, 1000);
+  </script>
+{% endblock %}

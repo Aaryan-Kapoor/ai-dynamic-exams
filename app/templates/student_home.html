@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2 style="margin-top:0;">Student Page</h2>
+    {% if not config %}
+      <div class="error">No exam is configured for your department/grade yet. Please contact your teacher.</div>
+    {% else %}
+      <div class="row">
+        <div class="col">
+          <div class="pill">Max duration: {{ config.max_duration_minutes }} min</div>
+          <div class="pill" style="margin-left:8px;">Max attempts: {{ config.max_attempts }}</div>
+          <div class="pill" style="margin-left:8px;">Questions: {{ config.max_questions }}</div>
+          <div style="margin-top: 12px;" class="muted">
+            Attempts used: {{ attempts_used }} / {{ max_attempts }}
+          </div>
+        </div>
+        <div class="col" style="text-align:right;">
+          {% if active_attempt %}
+            <form method="get" action="/student/exam">
+              <button class="primary" type="submit">Resume exam</button>
+            </form>
+          {% else %}
+            <form method="post" action="/student/exam/start">
+              <button class="primary" type="submit">Start exam</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
+

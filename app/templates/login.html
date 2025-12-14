@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card" style="max-width:520px; margin: 40px auto;">
+    <h2 style="margin:0 0 6px 0;">Login</h2>
+    <div class="muted" style="font-size:13px;">No registration. Your account must already exist in the database.</div>
+    <form method="post" action="/login" style="margin-top: 14px;">
+      <label>University ID</label>
+      <input name="university_id" placeholder="e.g. s2001" required>
+      <label>Password</label>
+      <input type="password" name="password" required>
+      <div style="margin-top: 14px;">
+        <button class="primary" type="submit">Sign in</button>
+      </div>
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+    </form>
+  </div>
+{% endblock %}
+
