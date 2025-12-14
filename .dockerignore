@@ -1,0 +1,30 @@
+.env
+.env.*
+
+# Local data
+data/
+*.db
+*.sqlite
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node / Next.js
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# VCS/editor
+.git/
+.DS_Store
+
+# Repo marketing assets (not needed in runtime image)
+repo_assets/
+
