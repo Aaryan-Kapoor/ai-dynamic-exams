@@ -12,3 +12,4 @@ pypdf>=4.0
 pillow>=10.0
 pytesseract>=0.3.10
 sentence-transformers>=3.0.0
+bcrypt>=4.0.1

@@ -6,8 +6,6 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,17 +17,25 @@ from app.models import (
     ExamAttempt,
     ExamConfig,
     LectureChunk,
+    LectureChunkEmbedding,
     LectureMaterial,
     Role,
     User,
 )
 from app.rbac import require_roles
+from app.schemas import (
+    ExamConfigRead,
+    ExamConfigUpdate,
+    TeacherDashboardState,
+    DepartmentRead,
+    LectureMaterialRead,
+    ExamAttemptRead,
+)
 from app.services.lecture_processing import chunk_text, extract_text_from_upload
 from app.services.vector_index import ensure_chunk_embeddings
 
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
-templates = Jinja2Templates(directory="app/templates")
 
 
 def _accessible_departments(db: Session, user: User) -> list[Department]:
@@ -50,22 +56,25 @@ def _ensure_department_access(db: Session, *, user: User, department_id: int) ->
         raise HTTPException(status_code=403, detail="Not allowed for this department.")
 
 
-@router.get("")
+@router.get("/dashboard", response_model=TeacherDashboardState)
 def dashboard(
-    request: Request,
+    department_id: int | None = None,
+    grade_level: int = 1,
     user: User = Depends(require_roles(Role.teacher, Role.head, Role.college_admin, Role.system_admin)),
     db: Session = Depends(get_db),
 ):
-    settings = get_settings()
     departments = _accessible_departments(db, user)
     if not departments:
         raise HTTPException(status_code=403, detail="No departments assigned to this teacher.")
 
     allowed_ids = {d.id for d in departments}
-    department_id = int(request.query_params.get("department_id", departments[0].id))
+    
+    if department_id is None:
+        department_id = departments[0].id
+        
     if department_id not in allowed_ids:
         department_id = departments[0].id
-    grade_level = int(request.query_params.get("grade_level", 1))
+
     if grade_level not in {1, 2, 3, 4}:
         grade_level = 1
 
@@ -82,58 +91,47 @@ def dashboard(
         .limit(20)
     ).all()
 
-    return templates.TemplateResponse(
-        "teacher_dashboard.html",
-        {
-            "request": request,
-            "user": user,
-            "departments": departments,
-            "department_id": department_id,
-            "grade_level": grade_level,
-            "config": config,
-            "defaults": settings,
-            "lectures": lectures,
-        },
+    return TeacherDashboardState(
+        departments=departments,
+        current_department_id=department_id,
+        current_grade_level=grade_level,
+        config=config,
+        lectures=lectures,
     )
 
 
-@router.post("/config")
+@router.post("/config", response_model=ExamConfigRead)
 def save_config(
-    request: Request,
-    department_id: int = Form(...),
-    grade_level: int = Form(...),
-    max_duration_minutes: int = Form(...),
-    max_attempts: int = Form(...),
-    max_questions: int = Form(...),
-    stop_consecutive_incorrect: int = Form(...),
-    stop_slow_seconds: int = Form(...),
-    difficulty_min: int = Form(...),
-    difficulty_max: int = Form(...),
+    payload: ExamConfigUpdate,
     user: User = Depends(require_roles(Role.teacher, Role.head, Role.college_admin, Role.system_admin)),
     db: Session = Depends(get_db),
 ):
-    _ensure_department_access(db, user=user, department_id=department_id)
-    if grade_level not in {1, 2, 3, 4}:
+    _ensure_department_access(db, user=user, department_id=payload.department_id)
+    if payload.grade_level not in {1, 2, 3, 4}:
         raise HTTPException(status_code=400, detail="Invalid grade level.")
 
-    max_duration_minutes = max(1, min(600, int(max_duration_minutes)))
-    max_attempts = max(1, min(10, int(max_attempts)))
-    max_questions = max(1, min(200, int(max_questions)))
-    stop_consecutive_incorrect = max(1, min(50, int(stop_consecutive_incorrect)))
-    stop_slow_seconds = max(10, min(7200, int(stop_slow_seconds)))
-    difficulty_min = max(1, min(5, int(difficulty_min)))
-    difficulty_max = max(1, min(5, int(difficulty_max)))
+    # Validate ranges
+    max_duration_minutes = max(1, min(600, payload.max_duration_minutes))
+    max_attempts = max(1, min(10, payload.max_attempts))
+    max_questions = max(1, min(200, payload.max_questions))
+    stop_consecutive_incorrect = max(1, min(50, payload.stop_consecutive_incorrect))
+    stop_slow_seconds = max(10, min(7200, payload.stop_slow_seconds))
+    difficulty_min = max(1, min(5, payload.difficulty_min))
+    difficulty_max = max(1, min(5, payload.difficulty_max))
+    
     if difficulty_min > difficulty_max:
         difficulty_min, difficulty_max = difficulty_max, difficulty_min
+
     cfg = db.scalar(
         select(ExamConfig)
-        .where(ExamConfig.department_id == department_id)
-        .where(ExamConfig.grade_level == grade_level)
+        .where(ExamConfig.department_id == payload.department_id)
+        .where(ExamConfig.grade_level == payload.grade_level)
     )
+    
     if not cfg:
         cfg = ExamConfig(
-            department_id=department_id,
-            grade_level=grade_level,
+            department_id=payload.department_id,
+            grade_level=payload.grade_level,
             max_duration_minutes=max_duration_minutes,
             max_attempts=max_attempts,
             max_questions=max_questions,
@@ -152,15 +150,14 @@ def save_config(
         cfg.difficulty_min = difficulty_min
         cfg.difficulty_max = difficulty_max
         cfg.updated_at = datetime.utcnow()
+        
     db.commit()
-    return RedirectResponse(
-        f"/teacher?department_id={department_id}&grade_level={grade_level}", status_code=303
-    )
+    db.refresh(cfg)
+    return cfg
 
 
-@router.post("/lectures/upload")
+@router.post("/lectures/upload", response_model=LectureMaterialRead)
 def upload_lecture(
-    request: Request,
     department_id: int = Form(...),
     grade_level: int = Form(...),
     file: UploadFile = File(...),
@@ -191,7 +188,8 @@ def upload_lecture(
         extracted = extract_text_from_upload(out_path)
         if not extracted.strip():
             raise RuntimeError(
-                "Could not extract any text from this file. Try a text-based PDF, or install OCR for images/scans."
+                "Could not extract any text from this file. "
+                "Try a text-based PDF, or install OCR for images/scans."
             )
     except RuntimeError as exc:
         try:
@@ -234,23 +232,60 @@ def upload_lecture(
 
     ensure_chunk_embeddings(db, chunk_ids=[c.id for c in chunk_rows], dim=settings.embedding_dim)
 
-    return RedirectResponse(
-        f"/teacher?department_id={department_id}&grade_level={grade_level}", status_code=303
-    )
+    return material
 
 
-@router.get("/results")
+@router.delete("/lectures/{lecture_id}")
+def delete_lecture(
+    lecture_id: int,
+    user: User = Depends(require_roles(Role.teacher, Role.head, Role.college_admin, Role.system_admin)),
+    db: Session = Depends(get_db),
+):
+    lecture = db.scalar(select(LectureMaterial).where(LectureMaterial.id == lecture_id))
+    if not lecture:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+
+    _ensure_department_access(db, user=user, department_id=lecture.department_id)
+
+    # Delete from disk
+    if lecture.stored_path:
+        try:
+            p = Path(lecture.stored_path)
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass  # Log error ideally
+
+    # Explicitly delete chunks and their embeddings first
+    chunks = db.scalars(select(LectureChunk).where(LectureChunk.material_id == lecture_id)).all()
+    for chunk in chunks:
+        # Delete embedding if exists
+        embedding = db.scalar(select(LectureChunkEmbedding).where(LectureChunkEmbedding.chunk_id == chunk.id))
+        if embedding:
+            db.delete(embedding)
+        db.delete(chunk)
+    
+    db.delete(lecture)
+    db.commit()
+    return {"status": "success"}
+
+
+
+@router.get("/results", response_model=list[ExamAttemptRead])
 def results(
-    request: Request,
+    department_id: int | None = None,
+    grade_level: int = 1,
     user: User = Depends(require_roles(Role.teacher, Role.head, Role.college_admin, Role.system_admin)),
     db: Session = Depends(get_db),
 ):
     departments = _accessible_departments(db, user)
     if not departments:
         raise HTTPException(status_code=403, detail="No departments assigned.")
-
-    department_id = int(request.query_params.get("department_id", departments[0].id))
-    grade_level = int(request.query_params.get("grade_level", 1))
+    
+    if department_id is None:
+        department_id = departments[0].id
+        
+    _ensure_department_access(db, user=user, department_id=department_id)
 
     cfg = db.scalar(
         select(ExamConfig)
@@ -266,15 +301,4 @@ def results(
             .limit(100)
         ).all()
 
-    return templates.TemplateResponse(
-        "teacher_results.html",
-        {
-            "request": request,
-            "user": user,
-            "departments": departments,
-            "department_id": department_id,
-            "grade_level": grade_level,
-            "config": cfg,
-            "attempts": attempts,
-        },
-    )
+    return attempts

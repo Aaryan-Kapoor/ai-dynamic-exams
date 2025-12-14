@@ -1,61 +1,41 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import login_user, logout_user, verify_password
 from app.db import get_db
-from app.models import Role, User
+from app.models import User
+from app.schemas import LoginRequest, UserRead
 
+router = APIRouter(prefix="/auth", tags=["auth"])
 
-router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
-
-
-@router.get("/")
-def home(request: Request, db: Session = Depends(get_db)):
+@router.get("/me", response_model=UserRead)
+def get_current_user_info(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user_id")
     if not user_id:
-        return RedirectResponse("/login", status_code=303)
+        raise HTTPException(status_code=401, detail="Not authenticated")
     user = db.scalar(select(User).where(User.id == int(user_id)))
     if not user:
         request.session.pop("user_id", None)
-        return RedirectResponse("/login", status_code=303)
-    if user.role == Role.student:
-        return RedirectResponse("/student", status_code=303)
-    return RedirectResponse("/teacher", status_code=303)
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
 
-
-@router.get("/login")
-def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
-
-
-@router.post("/login")
+@router.post("/login", response_model=UserRead)
 def login(
     request: Request,
-    university_id: str = Form(...),
-    password: str = Form(...),
+    payload: LoginRequest,
     db: Session = Depends(get_db),
 ):
-    user = db.scalar(select(User).where(User.university_id == university_id))
-    if not user or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Invalid ID or password."},
-            status_code=401,
-        )
+    user = db.scalar(select(User).where(User.university_id == payload.university_id))
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid ID or password.")
     login_user(request, user)
-    if user.role == Role.student:
-        return RedirectResponse("/student", status_code=303)
-    return RedirectResponse("/teacher", status_code=303)
-
+    return user
 
 @router.post("/logout")
 def logout(request: Request):
     logout_user(request)
-    return RedirectResponse("/login", status_code=303)
+    return {"detail": "Logged out"}
 

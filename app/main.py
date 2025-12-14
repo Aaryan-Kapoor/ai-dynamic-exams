@@ -12,6 +12,7 @@ from app.db import Base, engine
 from app.routers import auth as auth_router
 from app.routers import student as student_router
 from app.routers import teacher as teacher_router
+from app.routers import admin as admin_router
 
 
 settings = get_settings()
@@ -26,6 +27,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(auth_router.router)
 app.include_router(teacher_router.router)
 app.include_router(student_router.router)
+app.include_router(admin_router.router)
 
 
 @app.exception_handler(HTTPException)
