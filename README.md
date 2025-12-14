@@ -186,7 +186,7 @@ docker compose version
 ### 3) Clone the repo
 
 ```bash
-git clone https://github.com/Aaryan-Kapoor/ai-exam-system
+git clone https://github.com/Aaryan-Kapoor/ai-dynamic-exams
 cd ai-exam-system
 ```
 
